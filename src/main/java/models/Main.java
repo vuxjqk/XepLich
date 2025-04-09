@@ -24,7 +24,8 @@ public class Main {
         List<Schedule> schedules = CSVReaderUtil.readSchedules(doctors, rooms, days);
 
         GeneticAlgorithm ga = new GeneticAlgorithm(doctors, rooms, days,
-                200, 2000, 3, 0.8, 0.2, random);
+                200, 2000, 3,
+                0.8, 0.2, random);
         ga.run();
     }
 }

@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.TreeSet;
 
 /**
  *
@@ -32,25 +33,31 @@ public record GeneticAlgorithm(
 
     private List<Schedule> createIndividual() {
         List<Schedule> individual = new ArrayList<>();
+
         for (Day day : days) {
             for (Room room : rooms) {
                 Doctor doctor = doctors.get(random.nextInt(doctors.size()));
                 individual.add(new Schedule(doctor, room, day));
             }
         }
+
         return individual;
     }
 
     private List<List<Schedule>> createPopulation() {
         Set<List<Schedule>> population = new HashSet<>();
-        for (int i = 0; i < populationSize; i++) {
+
+        while (population.size() < populationSize) {
             population.add(createIndividual());
         }
+
         return new ArrayList<>(population);
     }
 
     private int fitness(List<Schedule> individual) {
         int violations = 0;
+        Map<Doctor, TreeSet<Day>> doctorShifts = new HashMap<>();
+        Map<Doctor, Integer> doctorShiftCount = new HashMap<>();
 
         for (Schedule schedule : individual) {
             Doctor doctor = schedule.doctor();
@@ -64,16 +71,42 @@ public record GeneticAlgorithm(
             if (doctor.daysOff().contains(day)) {
                 violations += 1000;
             }
+
+            doctorShifts.computeIfAbsent(doctor, _ -> new TreeSet<>(Comparator.comparingInt(Day::dayID)));
+            if (!doctorShifts.get(doctor).add(day)) {
+                violations += 1000;
+            }
+        }
+
+        for (Map.Entry<Doctor, TreeSet<Day>> doctorShiftEntry : doctorShifts.entrySet()) {
+            Day prevDay = null;
+            for (Day day : doctorShiftEntry.getValue()) {
+                if (prevDay != null) {
+                    int gap = day.dayID() - prevDay.dayID();
+                    violations += 12 / gap;
+                }
+                prevDay = day;
+            }
+
+            doctorShiftCount.put(doctorShiftEntry.getKey(), doctorShiftEntry.getValue().size());
+        }
+
+        int avgShifts = doctorShiftCount.values().stream()
+                .mapToInt(Integer::intValue)
+                .sum() / doctors.size();
+
+        for (int shiftCount : doctorShiftCount.values()) {
+            violations += Math.abs(shiftCount - avgShifts);
         }
 
         return violations;
     }
 
-    private List<Schedule> runTournament(List<List<Schedule>> population, int tournamentSize) {
+    private List<Schedule> runTournament(List<List<Schedule>> population) {
         List<List<Schedule>> shuffled = new ArrayList<>(population);
         Collections.shuffle(shuffled, random);
 
-        List<List<Schedule>> tournament = shuffled.subList(0, Math.min(tournamentSize, shuffled.size()));
+        List<List<Schedule>> tournament = shuffled.subList(0, tournamentSize);
 
         return tournament.stream()
                 .min(Comparator.comparingInt(this::fitness))
@@ -84,7 +117,7 @@ public record GeneticAlgorithm(
         List<List<Schedule>> selected = new ArrayList<>();
 
         for (int i = 0; i < populationSize / 2; i++) {
-            List<Schedule> winner = runTournament(population, tournamentSize);
+            List<Schedule> winner = runTournament(population);
             selected.add(winner);
         }
 
